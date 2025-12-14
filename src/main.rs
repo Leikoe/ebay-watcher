@@ -5,10 +5,7 @@ use crate::{
 };
 use base64::prelude::{BASE64_STANDARD, Engine as _};
 use dotenv::dotenv;
-use reqwest::{
-    Client, ClientBuilder,
-    header::{HeaderMap, HeaderValue},
-};
+use reqwest::Client;
 use serde::Deserialize;
 use std::{collections::HashMap, env, time::Duration};
 use tokio::{
@@ -72,7 +69,7 @@ async fn run(
 ) -> Result<(), String> {
     let mut ebay_token = ebay_get_token(&ebay_app_id, &ebay_app_secret)
         .await
-        .unwrap();
+        .map_err(|e| e.to_string())?;
 
     let mut ids_db: HashMap<String, ItemSummary> = HashMap::new();
     let mut new_db = true;
@@ -106,7 +103,7 @@ async fn run(
                 println!("{:?}", txt);
                 return Err(format!("Got Status {:?}: {:?}", status, txt));
             }
-            let items: ItemSummaryResponse = resp.json().await.unwrap();
+            let items: ItemSummaryResponse = resp.json().await.map_err(|e| e.to_string())?;
 
             for item in &items.item_summaries {
                 let Some(id) = item.id() else {
