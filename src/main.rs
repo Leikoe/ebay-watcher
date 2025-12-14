@@ -10,6 +10,7 @@ use std::env;
 mod discord;
 mod ebay_api_model;
 mod ebay_finder;
+mod id_db;
 
 // const QUERY: &str = "nvidia (H100,H800,A100,A800,Ampere,Hopper,L40,L40S,SXM,SXM4,48GB,40GB,HBM2,HBM3) -(RTX,Shroud,fan,cooling,blower,A2,A30,A40,16GB,P100,Laptop,HP,Lenovo,Windows,SSD,i7,i5,Pascal)";
 const QUERY: &str = "nvidia PG530";
