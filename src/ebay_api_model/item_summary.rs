@@ -2,6 +2,15 @@ use chrono::{DateTime, Utc};
 use serde::{self, Deserialize};
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct ItemSeller {
+    pub username: String,
+    #[serde(rename = "feedbackPercentage")]
+    pub feedback_percentage: String,
+    #[serde(rename = "feedbackScore")]
+    pub feedback_score: u64,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ItemPrice {
     pub value: String,
     pub currency: String, // TODO: change to enum ?
@@ -35,6 +44,7 @@ pub struct ItemSummary {
     pub image: Option<ItemImage>,
     #[serde(rename = "itemEndDate")]
     pub item_end_date: Option<String>,
+    pub seller: ItemSeller,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]

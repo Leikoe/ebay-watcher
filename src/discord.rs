@@ -51,7 +51,15 @@ impl DiscordClient {
             .embed({
                 let mut emb = CreateEmbed::new()
                     .title(&listing.title)
-                    .footer(CreateEmbedFooter::new("Ebay Watcher").icon_url(AVATAR_URL))
+                    .footer(
+                        CreateEmbedFooter::new(&format!(
+                            "{} ({}) | {}% positive",
+                            listing.seller.username,
+                            listing.seller.feedback_score,
+                            listing.seller.feedback_percentage
+                        ))
+                        .icon_url(AVATAR_URL),
+                    )
                     .color(if listing.is_auction() {
                         (0xE7, 0x6F, 0x51)
                     } else {
