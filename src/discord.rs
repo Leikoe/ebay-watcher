@@ -19,10 +19,19 @@ impl DiscordClient {
         }
     }
 
+    pub async fn send_message(&self, message: &str) {
+        let webhook = Webhook::from_url(&self.http_client, &self.url)
+            .await
+            .expect("couldn't validate webhook url"); // TODO: this might fire a request to discord's api ...
+
+        println!("[DISCORD] Seding message {:?}", message);
+    }
+
     pub async fn send_item(
         &self,
-        listing: &ItemSummary,
         event: NotifEvent,
+        listing: &ItemSummary,
+        old_listing: Option<&ItemSummary>,
     ) -> Result<(), serenity::Error> {
         let webhook = Webhook::from_url(&self.http_client, &self.url)
             .await
@@ -47,15 +56,43 @@ impl DiscordClient {
                     (0x26, 0x46, 0x53)
                 });
             if listing.is_auction() {
-                if let Some((price, currency)) = listing.current_bid_price() {
-                    emb = emb.field("Current Price", &format!("{} {}", price, currency), false);
+                if let Some(old_listing) = old_listing
+                    && old_listing.current_bid_price() != listing.current_bid_price()
+                {
+                    if let (Some((old_price, old_currency)), Some((price, currency))) =
+                        (old_listing.current_bid_price(), listing.current_bid_price())
+                    {
+                        emb = emb.field(
+                            "Current Price",
+                            &format!("{} {} -> {} {}", old_price, old_currency, price, currency),
+                            false,
+                        );
+                    }
+                } else {
+                    if let Some((price, currency)) = listing.current_bid_price() {
+                        emb = emb.field("Current Price", &format!("{} {}", price, currency), false);
+                    }
                 }
                 if let Some(t) = listing.end_timestamp() {
                     emb = emb.field("Ends in", &format!("<t:{}:R>", t), false)
                 }
             }
-            if let Some((price, currency)) = listing.bin_price() {
-                emb = emb.field("BIN Price", &format!("{} {}", price, currency), false);
+            if let Some(old_listing) = old_listing
+                && old_listing.bin_price() != listing.bin_price()
+            {
+                if let (Some((old_price, old_currency)), Some((price, currency))) =
+                    (old_listing.bin_price(), listing.bin_price())
+                {
+                    emb = emb.field(
+                        "BIN Price",
+                        &format!("{} {} -> {} {}", old_price, old_currency, price, currency),
+                        false,
+                    );
+                }
+            } else {
+                if let Some((price, currency)) = listing.bin_price() {
+                    emb = emb.field("BIN Price", &format!("{} {}", price, currency), false);
+                }
             }
             emb.field(
                 "Condition",

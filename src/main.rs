@@ -1,29 +1,34 @@
-use crate::{discord::DiscordClient, ebay_finder::NotifEvent, id_db::IdDatabase};
+use crate::{
+    discord::DiscordClient, ebay_api_model::item_summary::ItemSummary, ebay_finder::NotifEvent,
+};
 use dotenv::dotenv;
 use ebay_api_model::item_summary::ItemSummaryResponse;
 use reqwest::{
     ClientBuilder,
     header::{HeaderMap, HeaderValue},
 };
-use std::{env, path::Path, time::Duration};
+use std::{collections::HashMap, env, path::Path, time::Duration};
 use tokio::time::sleep;
 
 mod discord;
 mod ebay_api_model;
 mod ebay_finder;
-mod id_db;
 
 // const QUERY: &str = "nvidia (H100,H800,A100,A800,Ampere,Hopper,L40,L40S,SXM,SXM4,48GB,40GB,HBM2,HBM3) -(RTX,Shroud,fan,cooling,blower,A2,A30,A40,16GB,P100,Laptop,HP,Lenovo,Windows,SSD,i7,i5,Pascal)";
-const QUERY: &str = "nvidia (H100,H800,A100,A800,PG530,PG520,PG)";
-const IDS_DB_FILE: &str = "db.txt";
+const QUERIES: [&str; 2] = [
+    "nvidia (A100,A800,A100X,A800X,H100,H800,PG530,PG520,PG,HBM3,HBM3e,PG199,DRIVE A100)",
+    "amd (MI250,MI250X,MI300X,MI300A,MI325X,MI350X,MI355X,MI,HBM3,HBM3e)",
+];
 
 #[tokio::main]
 async fn main() {
-    if QUERY.len() > 100 {
-        println!(
-            "QUERY longer than max, will be truncated to '{}'",
-            QUERY.chars().take(100).collect::<String>()
-        );
+    for query in QUERIES {
+        if query.len() > 100 {
+            println!(
+                "query longer than max, will be truncated to '{}'",
+                query.chars().take(100).collect::<String>()
+            );
+        }
     }
 
     let _ = dotenv().ok();
@@ -52,54 +57,67 @@ async fn main() {
         .build()
         .expect("couldn't build web client");
 
-    let ids_db_path = Path::new(IDS_DB_FILE);
-    let mut new_db = false;
-    let mut ids_db = IdDatabase::from_path(ids_db_path).unwrap_or({
-        println!("couldn't find ids db file, creating a new empty ids db");
-        new_db = true;
-        IdDatabase::new()
-    });
+    let mut ids_db: HashMap<String, ItemSummary> = HashMap::new();
+    let mut new_db = true;
+
+    webhook_client.send_message("Starting Up!").await;
 
     loop {
         let mut new_items_count: usize = 0;
+        let mut updated_items_count: usize = 0;
         println!("requesting items from ebay..");
-        let resp = http_client
-            .get(format!(
-                "https://api.ebay.com/buy/browse/v1/item_summary/search?q={}&limit=200&sort=newlyListed",
-                QUERY
-            ))
-            .header("X-EBAY-C-MARKETPLACE-ID", "EBAY-US")
-            .send()
-            .await
-            .unwrap();
+        for query in QUERIES {
+            println!("\tq={}", query);
+            let resp = http_client
+                .get(format!(
+                    "https://api.ebay.com/buy/browse/v1/item_summary/search?q={}&limit=200&sort=newlyListed",
+                    query
+                ))
+                .header("X-EBAY-C-MARKETPLACE-ID", "EBAY-US")
+                .send()
+                .await
+                .unwrap();
 
-        if resp.status() != 200 {
-            println!("{}", resp.text().await.unwrap());
-            return;
-        }
-        let items: ItemSummaryResponse = resp.json().await.unwrap();
-
-        for item in items.item_summaries {
-            let Some(id) = item.id() else {
-                eprintln!("coudln't get item id from ({})", item.item_id);
-                continue;
-            };
-
-            // if new item
-            if !ids_db.contains(id) && !new_db {
-                new_items_count += 1;
-                webhook_client
-                    .send_item(&item, NotifEvent::CREATED)
-                    .await
-                    .expect("couldn't send webhook");
+            if resp.status() != 200 {
+                println!("{}", resp.text().await.unwrap());
+                return;
             }
-            ids_db.add(id); // TODO: do the flip flop technique to never OOM
+            let items: ItemSummaryResponse = resp.json().await.unwrap();
+
+            for item in &items.item_summaries {
+                let Some(id) = item.id() else {
+                    eprintln!("coudln't get item id from ({})", item.item_id);
+                    continue;
+                };
+
+                // if new item and not initializing db
+                if !new_db {
+                    match ids_db.get(id) {
+                        Some(old_item) => {
+                            if item.price != old_item.price {
+                                updated_items_count += 1;
+                                webhook_client
+                                    .send_item(NotifEvent::UPDATED, &item, Some(old_item))
+                                    .await
+                                    .expect("couldn't send webhook");
+                            }
+                        }
+                        None => {
+                            // new item
+                            new_items_count += 1;
+                            webhook_client
+                                .send_item(NotifEvent::CREATED, &item, None)
+                                .await
+                                .expect("couldn't send webhook");
+                        }
+                    };
+                }
+                ids_db.insert(id.to_owned(), item.clone()); // TODO: do the flip flop technique to never OOM
+            }
         }
+
         println!("found {} new items", new_items_count);
         new_db = false; // db is inited after first loop
-        if let Err(e) = ids_db.save_to_path(ids_db_path) {
-            eprintln!("[ERR] couldn't save db to path: {}", e);
-        }
         sleep(Duration::from_secs(60)).await;
     }
 }
