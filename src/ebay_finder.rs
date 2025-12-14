@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy)]
-pub enum NotifStatus {
+pub enum NotifEvent {
     CREATED,
     UPDATED,
 }
