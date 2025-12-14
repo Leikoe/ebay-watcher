@@ -1,12 +1,12 @@
 use crate::{discord::DiscordClient, ebay_finder::NotifEvent, id_db::IdDatabase};
 use dotenv::dotenv;
-use ebay_api_model::item_summary::{ItemSummary, ItemSummaryResponse};
+use ebay_api_model::item_summary::ItemSummaryResponse;
 use reqwest::{
     ClientBuilder,
     header::{HeaderMap, HeaderValue},
 };
 use std::{env, path::Path, time::Duration};
-use tokio::time::{Sleep, sleep};
+use tokio::time::sleep;
 
 mod discord;
 mod ebay_api_model;
@@ -14,7 +14,7 @@ mod ebay_finder;
 mod id_db;
 
 // const QUERY: &str = "nvidia (H100,H800,A100,A800,Ampere,Hopper,L40,L40S,SXM,SXM4,48GB,40GB,HBM2,HBM3) -(RTX,Shroud,fan,cooling,blower,A2,A30,A40,16GB,P100,Laptop,HP,Lenovo,Windows,SSD,i7,i5,Pascal)";
-const QUERY: &str = "nvidia";
+const QUERY: &str = "nvidia (H100,H800,A100,A800,PG530,PG520,PG)";
 const IDS_DB_FILE: &str = "db.txt";
 
 #[tokio::main]
