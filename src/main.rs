@@ -1,11 +1,11 @@
-use crate::{discord::DiscordClient, ebay_finder::NotifEvent};
+use crate::{discord::DiscordClient, ebay_finder::NotifEvent, id_db::IdDatabase};
 use dotenv::dotenv;
 use ebay_api_model::item_summary::{ItemSummary, ItemSummaryResponse};
 use reqwest::{
     ClientBuilder,
     header::{HeaderMap, HeaderValue},
 };
-use std::env;
+use std::{env, path::Path};
 
 mod discord;
 mod ebay_api_model;
@@ -14,6 +14,7 @@ mod id_db;
 
 // const QUERY: &str = "nvidia (H100,H800,A100,A800,Ampere,Hopper,L40,L40S,SXM,SXM4,48GB,40GB,HBM2,HBM3) -(RTX,Shroud,fan,cooling,blower,A2,A30,A40,16GB,P100,Laptop,HP,Lenovo,Windows,SSD,i7,i5,Pascal)";
 const QUERY: &str = "nvidia PG530";
+const IDS_DB_FILE: &str = "db.txt";
 
 #[tokio::main]
 async fn main() {
@@ -49,6 +50,12 @@ async fn main() {
         })
         .build()
         .expect("couldn't build web client");
+
+    let ids_db_path = Path::new(IDS_DB_FILE);
+    let ids_db = IdDatabase::from_path(ids_db_path).unwrap_or({
+        println!("couldn't find ids db file, creating a new empty ids db");
+        IdDatabase::new()
+    });
 
     let resp = http_client
         .get(format!(

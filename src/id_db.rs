@@ -6,7 +6,7 @@ use std::{
 };
 
 #[derive(Debug)]
-struct IdDatabase {
+pub struct IdDatabase {
     ids: HashSet<String>,
 }
 
