@@ -3,13 +3,18 @@ use crate::{
     ebay_api_model::item_summary::{ItemSummary, ItemSummaryResponse},
     ebay_finder::NotifEvent,
 };
+use base64::prelude::{BASE64_STANDARD, Engine as _};
 use dotenv::dotenv;
 use reqwest::{
     Client, ClientBuilder,
     header::{HeaderMap, HeaderValue},
 };
+use serde::Deserialize;
 use std::{collections::HashMap, env, time::Duration};
-use tokio::{signal, time::sleep};
+use tokio::{
+    signal,
+    time::{Instant, sleep},
+};
 
 mod discord;
 mod ebay_api_model;
@@ -21,11 +26,66 @@ const QUERIES: [&str; 2] = [
     "amd (MI250,MI250X,MI300X,MI300A,MI325X,MI350X,MI355X,MI,HBM3,HBM3e)",
 ];
 
-async fn run(webhook_client: &DiscordClient, http_client: &Client) -> Result<(), String> {
+#[derive(Deserialize, Debug, Clone)]
+struct EbayTokenResp {
+    access_token: String,
+    expires_in: u64,
+    token_type: String,
+}
+
+struct EbayToken {
+    access_token: String,
+    expires_at: Instant,
+}
+
+async fn ebay_get_token(
+    ebay_app_id: &str,
+    ebay_app_secret: &str,
+) -> Result<EbayToken, reqwest::Error> {
+    println!("getting a new token!");
+    let client = Client::new();
+    let resp = client
+        .post("https://api.ebay.com/identity/v1/oauth2/token")
+        .header(
+            "Authorization",
+            format!(
+                "Basic {}",
+                BASE64_STANDARD.encode(format!("{}:{}", ebay_app_id, ebay_app_secret))
+            ),
+        )
+        .body("grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope")
+        .send()
+        .await?;
+    let token: EbayTokenResp = resp.json().await?;
+
+    Ok(EbayToken {
+        access_token: token.access_token,
+        expires_at: Instant::now() + Duration::from_secs(token.expires_in),
+    })
+}
+
+async fn run(
+    webhook_client: &DiscordClient,
+    http_client: &Client,
+    ebay_app_id: &str,
+    ebay_app_secret: &str,
+) -> Result<(), String> {
+    let mut ebay_token = ebay_get_token(&ebay_app_id, &ebay_app_secret)
+        .await
+        .unwrap();
+
     let mut ids_db: HashMap<String, ItemSummary> = HashMap::new();
     let mut new_db = true;
 
     loop {
+        // if token soon expired, request a new one
+        if Instant::now() + Duration::from_secs(5) > ebay_token.expires_at {
+            println!("[LOG] ebay token expired or expiring soon, requesting a new one");
+            ebay_token = ebay_get_token(ebay_app_id, ebay_app_secret)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+
         let mut new_items_count: usize = 0;
         let mut updated_items_count: usize = 0;
         println!("requesting items from ebay..");
@@ -36,6 +96,7 @@ async fn run(webhook_client: &DiscordClient, http_client: &Client) -> Result<(),
                     "https://api.ebay.com/buy/browse/v1/item_summary/search?q={}&limit=200&sort=newlyListed",
                     query
                 ))
+                .header("Authorization", format!("Bearer {}", ebay_token.access_token))
                 .header("X-EBAY-C-MARKETPLACE-ID", "EBAY-US")
                 .send()
                 .await.map_err(|e| e.to_string())?;
@@ -109,28 +170,22 @@ async fn main() {
     let _ = dotenv().ok();
 
     // get env vars
-    let token = env::vars()
-        .find(|(k, _)| k == "TOKEN")
+    let ebay_app_id = env::vars()
+        .find(|(k, _)| k == "EBAY_APP_ID")
         .map(|(_, t)| t)
-        .expect("couldn't find the TOKEN env var");
+        .expect("couldn't find the EBAY_APP_ID env var");
+    let ebay_app_secret = env::vars()
+        .find(|(k, _)| k == "EBAY_APP_SECRET")
+        .map(|(_, t)| t)
+        .expect("couldn't find the EBAY_APP_SECRET env var");
     let webhook_url = env::vars()
-        .find(|(k, _)| k == "WEBHOOK_URL")
+        .find(|(k, _)| k == "DISCORD_WEBHOOK_URL")
         .map(|(_, t)| t)
         .expect("couldn't find the WEBHOOK_URL env var");
 
     // create clients
     let webhook_client = DiscordClient::new(&webhook_url);
-    let http_client = ClientBuilder::default()
-        .default_headers({
-            let mut default_headers = HeaderMap::new();
-            default_headers.insert(
-                "Authorization",
-                HeaderValue::from_str(&format!("Bearer {}", token)).expect("TOKEN should be ascii"),
-            );
-            default_headers
-        })
-        .build()
-        .expect("couldn't build web client");
+    let http_client = Client::new();
 
     webhook_client
         .send_message(&format!(
@@ -141,7 +196,7 @@ async fn main() {
         .expect("couldn't send startup message");
 
     tokio::select! {
-        e = run(&webhook_client, &http_client) => {
+        e = run(&webhook_client, &http_client, &ebay_app_id, &ebay_app_secret) => {
             eprintln!("stopping bot, reason: {:?}", e);
             webhook_client.send_message("bot died, check console for reason").await.expect("couldn't send message")
         }
