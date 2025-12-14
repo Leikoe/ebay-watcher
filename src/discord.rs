@@ -60,9 +60,7 @@ impl DiscordClient {
                 if let Some(img) = &listing.image {
                     emb = emb.image(&img.image_url);
                 }
-                if let Some(id) = listing.id() {
-                    emb = emb.url(&format!("https://www.ebay.com/itm/{}", id));
-                }
+                emb = emb.url(&listing.item_web_url);
                 if listing.is_auction() {
                     let auction_price_display = if let Some(old_listing) = old_listing
                         && old_listing.current_bid_price() != listing.current_bid_price()

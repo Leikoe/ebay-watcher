@@ -24,6 +24,8 @@ pub struct ItemSummary {
     #[serde(rename = "itemId")]
     pub item_id: String,
     pub title: String,
+    #[serde(rename = "itemWebUrl")]
+    pub item_web_url: String,
     pub price: Option<ItemPrice>,
     #[serde(rename = "currentBidPrice")]
     pub current_bid_price: Option<ItemBidPrice>,
