@@ -142,7 +142,8 @@ async fn main() {
 
     tokio::select! {
         e = run(&webhook_client, &http_client) => {
-            webhook_client.send_message(&format!("stopping bot, reason: {:?}", e)).await.expect("couldn't send message")
+            eprintln!("stopping bot, reason: {:?}", e);
+            webhook_client.send_message("bot died, check console for reason").await.expect("couldn't send message")
         }
         _ = signal::ctrl_c() => {
             webhook_client.send_message("stopping bot").await.expect("couldn't send message")
