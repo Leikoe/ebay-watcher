@@ -21,7 +21,7 @@ const QUERIES: [&str; 2] = [
     "amd (MI250,MI250X,MI300X,MI300A,MI325X,MI350X,MI355X,MI,HBM3,HBM3e)",
 ];
 
-async fn run(webhook_client: &DiscordClient, http_client: &Client) {
+async fn run(webhook_client: &DiscordClient, http_client: &Client) -> Result<(), String> {
     let mut ids_db: HashMap<String, ItemSummary> = HashMap::new();
     let mut new_db = true;
 
@@ -38,12 +38,13 @@ async fn run(webhook_client: &DiscordClient, http_client: &Client) {
                 ))
                 .header("X-EBAY-C-MARKETPLACE-ID", "EBAY-US")
                 .send()
-                .await
-                .unwrap();
+                .await.map_err(|e| e.to_string())?;
 
-            if resp.status() != 200 {
-                println!("{}", resp.text().await.unwrap());
-                return;
+            let status = resp.status();
+            if status != 200 {
+                let txt = resp.text().await;
+                println!("{:?}", txt);
+                return Err(format!("Got Status {:?}: {:?}", status, txt));
             }
             let items: ItemSummaryResponse = resp.json().await.unwrap();
 
@@ -59,19 +60,25 @@ async fn run(webhook_client: &DiscordClient, http_client: &Client) {
                         Some(old_item) => {
                             if item.price != old_item.price {
                                 updated_items_count += 1;
-                                webhook_client
+                                if let Err(e) = webhook_client
                                     .send_item(NotifEvent::UPDATED, &item, Some(old_item))
                                     .await
-                                    .expect("couldn't send webhook");
+                                {
+                                    eprintln!("coudln't send price update webhook ({})", e);
+                                    continue;
+                                }
                             }
                         }
                         None => {
                             // new item
                             new_items_count += 1;
-                            webhook_client
+                            if let Err(e) = webhook_client
                                 .send_item(NotifEvent::CREATED, &item, None)
                                 .await
-                                .expect("couldn't send webhook");
+                            {
+                                eprintln!("coudln't send new item webhook ({})", e);
+                                continue;
+                            }
                         }
                     };
                 }
@@ -80,7 +87,7 @@ async fn run(webhook_client: &DiscordClient, http_client: &Client) {
         }
 
         println!(
-            "found {} new items and {} updated prices",
+            "Found {} new items and {} updated prices",
             new_items_count, updated_items_count
         );
         new_db = false; // db is inited after first loop
@@ -126,13 +133,16 @@ async fn main() {
         .expect("couldn't build web client");
 
     webhook_client
-        .send_message("Starting Up!")
+        .send_message(&format!(
+            "**Starting Up!**\nTracking: \n{}",
+            QUERIES.map(|q| format!("- {}", q)).join("\n")
+        ))
         .await
         .expect("couldn't send startup message");
 
     tokio::select! {
-        _ = run(&webhook_client, &http_client) => {
-            println!("do_stuff_async() completed first")
+        e = run(&webhook_client, &http_client) => {
+            webhook_client.send_message(&format!("stopping bot, reason: {:?}", e)).await.expect("couldn't send message")
         }
         _ = signal::ctrl_c() => {
             webhook_client.send_message("stopping bot").await.expect("couldn't send message")
