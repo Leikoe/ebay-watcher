@@ -22,6 +22,7 @@ const QUERIES: [&str; 2] = [
     "nvidia (A100,A800,A100X,A800X,H100,H800,PG530,PG520,PG,HBM3,HBM3e,PG199,DRIVE A100) -(Quadro)",
     "amd (MI250,MI250X,MI300X,MI300A,MI325X,MI350X,MI355X,MI,HBM3,HBM3e)",
 ];
+const MARKETPLACE_IDS: [&str; 4] = ["EBAY_US", "EBAY_FR", "EBAY_IT", "EBAY_ES"];
 
 #[derive(Deserialize, Debug, Clone)]
 struct EbayTokenResp {
@@ -86,60 +87,64 @@ async fn run(
         let mut new_items_count: usize = 0;
         let mut updated_items_count: usize = 0;
         println!("requesting items from ebay..");
-        for query in QUERIES {
-            println!("\tq={}", query);
-            let resp = http_client
+        for marketplace_id in MARKETPLACE_IDS {
+            for query in QUERIES {
+                println!("\tq={}", query);
+                let resp = http_client
                 .get(format!(
                     "https://api.ebay.com/buy/browse/v1/item_summary/search?q={}&limit=200&sort=newlyListed",
                     query
                 ))
                 .header("Authorization", format!("Bearer {}", ebay_token.access_token))
+                .header("Accept-Language", "en-US")
+                .header("X-EBAY-C-MARKETPLACE-ID", marketplace_id)
                 .send()
                 .await.map_err(|e| e.to_string())?;
 
-            let status = resp.status();
-            if status != 200 {
-                let txt = resp.text().await;
-                println!("{:?}", txt);
-                return Err(format!("Got Status {:?}: {:?}", status, txt));
-            }
-            let items: ItemSummaryResponse = resp.json().await.map_err(|e| e.to_string())?;
+                let status = resp.status();
+                if status != 200 {
+                    let txt = resp.text().await;
+                    println!("{:?}", txt);
+                    return Err(format!("Got Status {:?}: {:?}", status, txt));
+                }
+                let items: ItemSummaryResponse = resp.json().await.map_err(|e| e.to_string())?;
 
-            for item in &items.item_summaries {
-                let Some(id) = item.id() else {
-                    eprintln!("coudln't get item id from ({})", item.item_id);
-                    continue;
-                };
+                for item in &items.item_summaries {
+                    let Some(id) = item.id() else {
+                        eprintln!("coudln't get item id from ({})", item.item_id);
+                        continue;
+                    };
 
-                // if new item and not initializing db
-                if !new_db {
-                    match ids_db.get(id) {
-                        Some(old_item) => {
-                            if item.price != old_item.price {
-                                updated_items_count += 1;
+                    // if new item and not initializing db
+                    if !new_db {
+                        match ids_db.get(id) {
+                            Some(old_item) => {
+                                if item.price != old_item.price {
+                                    updated_items_count += 1;
+                                    if let Err(e) = webhook_client
+                                        .send_item(NotifEvent::UPDATED, &item, Some(old_item))
+                                        .await
+                                    {
+                                        eprintln!("coudln't send price update webhook ({})", e);
+                                        continue;
+                                    }
+                                }
+                            }
+                            None => {
+                                // new item
+                                new_items_count += 1;
                                 if let Err(e) = webhook_client
-                                    .send_item(NotifEvent::UPDATED, &item, Some(old_item))
+                                    .send_item(NotifEvent::CREATED, &item, None)
                                     .await
                                 {
-                                    eprintln!("coudln't send price update webhook ({})", e);
+                                    eprintln!("coudln't send new item webhook ({})", e);
                                     continue;
                                 }
                             }
-                        }
-                        None => {
-                            // new item
-                            new_items_count += 1;
-                            if let Err(e) = webhook_client
-                                .send_item(NotifEvent::CREATED, &item, None)
-                                .await
-                            {
-                                eprintln!("coudln't send new item webhook ({})", e);
-                                continue;
-                            }
-                        }
-                    };
+                        };
+                    }
+                    ids_db.insert(id.to_owned(), item.clone()); // TODO: do the flip flop technique to never OOM
                 }
-                ids_db.insert(id.to_owned(), item.clone()); // TODO: do the flip flop technique to never OOM
             }
         }
 
