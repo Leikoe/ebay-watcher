@@ -1,13 +1,14 @@
 use crate::{
-    discord::DiscordClient, ebay_api_model::item_summary::ItemSummary, ebay_finder::NotifEvent,
+    discord::DiscordClient,
+    ebay_api_model::item_summary::{ItemSummary, ItemSummaryResponse},
+    ebay_finder::NotifEvent,
 };
 use dotenv::dotenv;
-use ebay_api_model::item_summary::ItemSummaryResponse;
 use reqwest::{
     ClientBuilder,
     header::{HeaderMap, HeaderValue},
 };
-use std::{collections::HashMap, env, path::Path, time::Duration};
+use std::{collections::HashMap, env, time::Duration};
 use tokio::time::sleep;
 
 mod discord;
@@ -119,7 +120,10 @@ async fn main() {
             }
         }
 
-        println!("found {} new items", new_items_count);
+        println!(
+            "found {} new items and {} updated prices",
+            new_items_count, updated_items_count
+        );
         new_db = false; // db is inited after first loop
         sleep(Duration::from_secs(60)).await;
     }
