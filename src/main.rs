@@ -97,7 +97,6 @@ async fn run(
                     query
                 ))
                 .header("Authorization", format!("Bearer {}", ebay_token.access_token))
-                .header("X-EBAY-C-MARKETPLACE-ID", "EBAY-US")
                 .send()
                 .await.map_err(|e| e.to_string())?;
 
