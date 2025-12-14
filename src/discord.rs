@@ -22,11 +22,8 @@ impl DiscordClient {
     }
 
     pub async fn send_message(&self, message: &str) -> Result<(), serenity::Error> {
-        let webhook = Webhook::from_url(&self.http_client, &self.url)
-            .await
-            .expect("couldn't validate webhook url"); // TODO: this might fire a request to discord's api ...
-
         println!("[DISCORD] Seding message {:?}", message);
+        let webhook = Webhook::from_url(&self.http_client, &self.url).await?; // TODO: this might fire a request to discord's api ...
 
         let builder = ExecuteWebhook::new()
             .avatar_url(AVATAR_URL)
@@ -45,11 +42,8 @@ impl DiscordClient {
         listing: &ItemSummary,
         old_listing: Option<&ItemSummary>,
     ) -> Result<(), serenity::Error> {
-        let webhook = Webhook::from_url(&self.http_client, &self.url)
-            .await
-            .expect("couldn't validate webhook url"); // TODO: this might fire a request to discord's api ...
-
         println!("[DISCORD] Sending {:?} {:?}", event, listing);
+        let webhook = Webhook::from_url(&self.http_client, &self.url).await?; // TODO: this might fire a request to discord's api ...
 
         let builder = ExecuteWebhook::new()
             .avatar_url(AVATAR_URL)
@@ -57,10 +51,6 @@ impl DiscordClient {
             .embed({
                 let mut emb = CreateEmbed::new()
                     .title(&listing.title)
-                    .url(&format!(
-                        "https://www.ebay.com/itm/{}",
-                        listing.id().expect("couldn't parse id")
-                    ))
                     .footer(CreateEmbedFooter::new("Ebay Watcher").icon_url(AVATAR_URL))
                     .image(&listing.image.image_url)
                     .color(if listing.is_auction() {
@@ -68,31 +58,39 @@ impl DiscordClient {
                     } else {
                         (0x26, 0x46, 0x53)
                     });
+
+                if let Some(id) = listing.id() {
+                    emb = emb.url(&format!("https://www.ebay.com/itm/{}", id));
+                }
                 if listing.is_auction() {
-                    if let Some(old_listing) = old_listing
+                    let auction_price_display = if let Some(old_listing) = old_listing
                         && old_listing.current_bid_price() != listing.current_bid_price()
                     {
                         if let (Some((old_price, old_currency)), Some((price, currency))) =
                             (old_listing.current_bid_price(), listing.current_bid_price())
                         {
-                            emb = emb.field(
-                                "Current Price",
-                                &format!(
-                                    "{} {} -> {} {}",
-                                    old_price, old_currency, price, currency
-                                ),
-                                false,
-                            );
+                            Some(format!(
+                                "{} {} -> {} {}",
+                                old_price, old_currency, price, currency
+                            ))
+                        } else {
+                            None
                         }
                     } else {
                         if let Some((price, currency)) = listing.current_bid_price() {
-                            emb = emb.field(
-                                "Current Price",
-                                &format!("{} {}", price, currency),
-                                false,
-                            );
+                            Some(format!("{} {}", price, currency))
+                        } else {
+                            None
                         }
-                    }
+                    };
+                    emb = emb.field(
+                        "Current Price",
+                        auction_price_display
+                            .as_ref()
+                            .map(|s| s.as_str())
+                            .unwrap_or("couldn't get bid price info :("),
+                        false,
+                    );
                     if let Some(t) = listing.end_timestamp() {
                         emb = emb.field("Ends in", &format!("<t:{}:R>", t), false)
                     }
