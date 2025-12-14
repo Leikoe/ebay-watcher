@@ -98,7 +98,7 @@ async fn main() {
         println!("found {} new items", new_items_count);
         new_db = false; // db is inited after first loop
         if let Err(e) = ids_db.save_to_path(ids_db_path) {
-            eprintln!("[ERR] couldn't save db to path");
+            eprintln!("[ERR] couldn't save db to path: {}", e);
         }
         sleep(Duration::from_secs(60)).await;
     }
