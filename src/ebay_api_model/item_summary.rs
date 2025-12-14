@@ -76,4 +76,16 @@ impl ItemSummary {
             )
         })
     }
+
+    pub fn buying_options(&self) -> Vec<String> {
+        self.buying_options
+            .iter()
+            .map(|b| match b.as_str() {
+                "FIXED_PRICE" => "BIN".to_owned(),
+                "AUCTION" => "BID".to_owned(),
+                "BEST_OFFER" => "OFFER".to_owned(),
+                x => x.to_owned(),
+            })
+            .collect()
+    }
 }

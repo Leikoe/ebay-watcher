@@ -121,7 +121,11 @@ impl DiscordClient {
                         .unwrap_or("Unknown"),
                     false,
                 )
-                .field("Listing Type", &listing.buying_options.join(", "), false)
+                .field(
+                    "Buying options",
+                    &listing.buying_options().join(", "),
+                    false,
+                )
             });
         webhook
             .execute(&self.http_client, false, builder)
