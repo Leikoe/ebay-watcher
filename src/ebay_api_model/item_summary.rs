@@ -8,6 +8,12 @@ pub struct ItemPrice {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct ItemBidPrice {
+    pub value: String,
+    pub currency: String, // TODO: change to enum ?
+}
+
+#[derive(Deserialize, Debug)]
 pub struct ItemImage {
     #[serde(rename = "imageUrl")]
     pub image_url: String,
@@ -18,7 +24,9 @@ pub struct ItemSummary {
     #[serde(rename = "itemId")]
     pub item_id: String,
     pub title: String,
-    pub price: ItemPrice,
+    pub price: Option<ItemPrice>,
+    #[serde(rename = "currentBidPrice")]
+    pub current_bid_price: Option<ItemBidPrice>,
     pub condition: String,
     #[serde(rename = "buyingOptions")]
     pub buying_options: Vec<String>,
@@ -47,7 +55,25 @@ impl ItemSummary {
         })
     }
 
-    pub fn price(&self) -> f64 {
-        self.price.value.parse().expect("couldn't parse price")
+    pub fn id(&self) -> Option<&str> {
+        self.item_id.split("|").skip(1).next()
+    }
+
+    pub fn bin_price(&self) -> Option<(f64, &str)> {
+        self.price.as_ref().map(|p| {
+            (
+                p.value.parse().expect("couldn't parse bin price"),
+                p.currency.as_str(),
+            )
+        })
+    }
+
+    pub fn current_bid_price(&self) -> Option<(f64, &str)> {
+        self.current_bid_price.as_ref().map(|p| {
+            (
+                p.value.parse().expect("couldn't parse current bid price"),
+                p.currency.as_str(),
+            )
+        })
     }
 }
