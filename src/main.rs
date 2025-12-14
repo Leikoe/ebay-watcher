@@ -7,7 +7,7 @@ use base64::prelude::{BASE64_STANDARD, Engine as _};
 use dotenv::dotenv;
 use reqwest::Client;
 use serde::Deserialize;
-use std::{collections::HashMap, env, time::Duration};
+use std::{array, collections::HashMap, env, time::Duration};
 use tokio::{
     signal,
     time::{Instant, sleep},
@@ -72,7 +72,8 @@ async fn run(
         .await
         .map_err(|e| format!("get token failed: {}", e))?;
 
-    let mut ids_db: HashMap<String, ItemSummary> = HashMap::new();
+    let mut ids_dbs: [HashMap<String, ItemSummary>; MARKETPLACE_IDS.len()] =
+        array::repeat(HashMap::new());
     let mut new_db = true;
 
     loop {
@@ -87,7 +88,8 @@ async fn run(
         let mut new_items_count: usize = 0;
         let mut updated_items_count: usize = 0;
         println!("requesting items from ebay..");
-        for marketplace_id in MARKETPLACE_IDS {
+        for (marketplace_idx, &marketplace_id) in MARKETPLACE_IDS.iter().enumerate() {
+            let ids_db = &mut ids_dbs[marketplace_idx];
             for query in QUERIES {
                 println!("\tmarketplace_id={} query={}", marketplace_id, query);
                 let resp = http_client
