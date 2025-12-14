@@ -70,7 +70,7 @@ async fn run(
 ) -> Result<(), String> {
     let mut ebay_token = ebay_get_token(&ebay_app_id, &ebay_app_secret)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("get token failed: {}", e))?;
 
     let mut ids_db: HashMap<String, ItemSummary> = HashMap::new();
     let mut new_db = true;
@@ -81,7 +81,7 @@ async fn run(
             println!("[LOG] ebay token expired or expiring soon, requesting a new one");
             ebay_token = ebay_get_token(ebay_app_id, ebay_app_secret)
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| format!("update token failed: {:?}", e))?;
         }
 
         let mut new_items_count: usize = 0;
@@ -89,7 +89,7 @@ async fn run(
         println!("requesting items from ebay..");
         for marketplace_id in MARKETPLACE_IDS {
             for query in QUERIES {
-                println!("\tq={}", query);
+                println!("\tmarketplace_id={} query={}", marketplace_id, query);
                 let resp = http_client
                 .get(format!(
                     "https://api.ebay.com/buy/browse/v1/item_summary/search?q={}&limit=200&sort=newlyListed",
@@ -99,7 +99,7 @@ async fn run(
                 .header("Accept-Language", "en-US")
                 .header("X-EBAY-C-MARKETPLACE-ID", marketplace_id)
                 .send()
-                .await.map_err(|e| e.to_string())?;
+                .await.map_err(|e| format!("browse request failed: {:?}", e))?;
 
                 let status = resp.status();
                 if status != 200 {
@@ -107,7 +107,10 @@ async fn run(
                     println!("{:?}", txt);
                     return Err(format!("Got Status {:?}: {:?}", status, txt));
                 }
-                let items: ItemSummaryResponse = resp.json().await.map_err(|e| e.to_string())?;
+                let items: ItemSummaryResponse = resp
+                    .json()
+                    .await
+                    .map_err(|e| format!("failed to decode resp to json: {:?}", e))?;
 
                 for item in &items.item_summaries {
                     let Some(id) = item.id() else {

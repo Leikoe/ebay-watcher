@@ -30,7 +30,7 @@ pub struct ItemSummary {
     pub condition: Option<String>,
     #[serde(rename = "buyingOptions")]
     pub buying_options: Vec<String>,
-    pub image: ItemImage,
+    pub image: Option<ItemImage>,
     #[serde(rename = "itemEndDate")]
     pub item_end_date: Option<String>,
 }

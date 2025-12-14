@@ -52,13 +52,14 @@ impl DiscordClient {
                 let mut emb = CreateEmbed::new()
                     .title(&listing.title)
                     .footer(CreateEmbedFooter::new("Ebay Watcher").icon_url(AVATAR_URL))
-                    .image(&listing.image.image_url)
                     .color(if listing.is_auction() {
                         (0xE7, 0x6F, 0x51)
                     } else {
                         (0x26, 0x46, 0x53)
                     });
-
+                if let Some(img) = &listing.image {
+                    emb = emb.image(&img.image_url);
+                }
                 if let Some(id) = listing.id() {
                     emb = emb.url(&format!("https://www.ebay.com/itm/{}", id));
                 }
