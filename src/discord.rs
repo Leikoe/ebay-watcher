@@ -22,7 +22,7 @@ impl DiscordClient {
     }
 
     pub async fn send_message(&self, message: &str) -> Result<(), serenity::Error> {
-        println!("[DISCORD] Seding message {:?}", message);
+        println!("[DISCORD] Sending message {:?}", message);
         let webhook = Webhook::from_url(&self.http_client, &self.url).await?; // TODO: this might fire a request to discord's api ...
 
         let builder = ExecuteWebhook::new()
