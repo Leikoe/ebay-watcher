@@ -5,11 +5,11 @@ use crate::{
 };
 use dotenv::dotenv;
 use reqwest::{
-    ClientBuilder,
+    Client, ClientBuilder,
     header::{HeaderMap, HeaderValue},
 };
 use std::{collections::HashMap, env, time::Duration};
-use tokio::time::sleep;
+use tokio::{signal, time::sleep};
 
 mod discord;
 mod ebay_api_model;
@@ -21,50 +21,9 @@ const QUERIES: [&str; 2] = [
     "amd (MI250,MI250X,MI300X,MI300A,MI325X,MI350X,MI355X,MI,HBM3,HBM3e)",
 ];
 
-#[tokio::main]
-async fn main() {
-    for query in QUERIES {
-        if query.len() > 100 {
-            println!(
-                "query longer than max, will be truncated to '{}'",
-                query.chars().take(100).collect::<String>()
-            );
-        }
-    }
-
-    let _ = dotenv().ok();
-
-    // get env vars
-    let token = env::vars()
-        .find(|(k, _)| k == "TOKEN")
-        .map(|(_, t)| t)
-        .expect("couldn't find the TOKEN env var");
-    let webhook_url = env::vars()
-        .find(|(k, _)| k == "WEBHOOK_URL")
-        .map(|(_, t)| t)
-        .expect("couldn't find the WEBHOOK_URL env var");
-
-    // create clients
-    let webhook_client = DiscordClient::new(&webhook_url);
-    let http_client = ClientBuilder::default()
-        .default_headers({
-            let mut default_headers = HeaderMap::new();
-            default_headers.insert(
-                "Authorization",
-                HeaderValue::from_str(&format!("Bearer {}", token)).expect("TOKEN should be ascii"),
-            );
-            default_headers
-        })
-        .build()
-        .expect("couldn't build web client");
-
+async fn run(webhook_client: &DiscordClient, http_client: &Client) {
     let mut ids_db: HashMap<String, ItemSummary> = HashMap::new();
     let mut new_db = true;
-
-    webhook_client
-        .send_message("Starting Up!")
-        .await
-        .expect("couldn't send startup message");
 
     loop {
         let mut new_items_count: usize = 0;
@@ -127,4 +86,56 @@ async fn main() {
         new_db = false; // db is inited after first loop
         sleep(Duration::from_secs(60)).await;
     }
+}
+
+#[tokio::main]
+async fn main() {
+    for query in QUERIES {
+        if query.len() > 100 {
+            println!(
+                "query longer than max, will be truncated to '{}'",
+                query.chars().take(100).collect::<String>()
+            );
+        }
+    }
+
+    let _ = dotenv().ok();
+
+    // get env vars
+    let token = env::vars()
+        .find(|(k, _)| k == "TOKEN")
+        .map(|(_, t)| t)
+        .expect("couldn't find the TOKEN env var");
+    let webhook_url = env::vars()
+        .find(|(k, _)| k == "WEBHOOK_URL")
+        .map(|(_, t)| t)
+        .expect("couldn't find the WEBHOOK_URL env var");
+
+    // create clients
+    let webhook_client = DiscordClient::new(&webhook_url);
+    let http_client = ClientBuilder::default()
+        .default_headers({
+            let mut default_headers = HeaderMap::new();
+            default_headers.insert(
+                "Authorization",
+                HeaderValue::from_str(&format!("Bearer {}", token)).expect("TOKEN should be ascii"),
+            );
+            default_headers
+        })
+        .build()
+        .expect("couldn't build web client");
+
+    webhook_client
+        .send_message("Starting Up!")
+        .await
+        .expect("couldn't send startup message");
+
+    tokio::select! {
+        _ = run(&webhook_client, &http_client) => {
+            println!("do_stuff_async() completed first")
+        }
+        _ = signal::ctrl_c() => {
+            webhook_client.send_message("stopping bot").await.expect("couldn't send message")
+        }
+    };
 }
