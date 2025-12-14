@@ -27,7 +27,7 @@ pub struct ItemSummary {
     pub price: Option<ItemPrice>,
     #[serde(rename = "currentBidPrice")]
     pub current_bid_price: Option<ItemBidPrice>,
-    pub condition: String,
+    pub condition: Option<String>,
     #[serde(rename = "buyingOptions")]
     pub buying_options: Vec<String>,
     pub image: ItemImage,

@@ -5,7 +5,8 @@ use reqwest::{
     ClientBuilder,
     header::{HeaderMap, HeaderValue},
 };
-use std::{env, path::Path};
+use std::{env, path::Path, time::Duration};
+use tokio::time::{Sleep, sleep};
 
 mod discord;
 mod ebay_api_model;
@@ -13,7 +14,7 @@ mod ebay_finder;
 mod id_db;
 
 // const QUERY: &str = "nvidia (H100,H800,A100,A800,Ampere,Hopper,L40,L40S,SXM,SXM4,48GB,40GB,HBM2,HBM3) -(RTX,Shroud,fan,cooling,blower,A2,A30,A40,16GB,P100,Laptop,HP,Lenovo,Windows,SSD,i7,i5,Pascal)";
-const QUERY: &str = "nvidia PG530";
+const QUERY: &str = "nvidia";
 const IDS_DB_FILE: &str = "db.txt";
 
 #[tokio::main]
@@ -52,34 +53,53 @@ async fn main() {
         .expect("couldn't build web client");
 
     let ids_db_path = Path::new(IDS_DB_FILE);
-    let ids_db = IdDatabase::from_path(ids_db_path).unwrap_or({
+    let mut new_db = false;
+    let mut ids_db = IdDatabase::from_path(ids_db_path).unwrap_or({
         println!("couldn't find ids db file, creating a new empty ids db");
+        new_db = true;
         IdDatabase::new()
     });
 
-    let resp = http_client
-        .get(format!(
-            "https://api.ebay.com/buy/browse/v1/item_summary/search?q={}&limit=5",
-            QUERY
-        ))
-        .header("X-EBAY-C-MARKETPLACE-ID", "EBAY-US")
-        .send()
-        .await
-        .unwrap();
-
-    println!("{:?}", resp.headers());
-
-    if resp.status() != 200 {
-        println!("{}", resp.text().await.unwrap());
-        return;
-    }
-    let items: ItemSummaryResponse = resp.json().await.unwrap();
-
-    println!("Items:");
-    for item in items.item_summaries {
-        webhook_client
-            .send_item(&item, NotifEvent::CREATED)
+    loop {
+        let mut new_items_count: usize = 0;
+        println!("requesting items from ebay..");
+        let resp = http_client
+            .get(format!(
+                "https://api.ebay.com/buy/browse/v1/item_summary/search?q={}&limit=200&sort=newlyListed",
+                QUERY
+            ))
+            .header("X-EBAY-C-MARKETPLACE-ID", "EBAY-US")
+            .send()
             .await
-            .expect("couldn't send webhook");
+            .unwrap();
+
+        if resp.status() != 200 {
+            println!("{}", resp.text().await.unwrap());
+            return;
+        }
+        let items: ItemSummaryResponse = resp.json().await.unwrap();
+
+        for item in items.item_summaries {
+            let Some(id) = item.id() else {
+                eprintln!("coudln't get item id from ({})", item.item_id);
+                continue;
+            };
+
+            // if new item
+            if !ids_db.contains(id) && !new_db {
+                new_items_count += 1;
+                webhook_client
+                    .send_item(&item, NotifEvent::CREATED)
+                    .await
+                    .expect("couldn't send webhook");
+            }
+            ids_db.add(id); // TODO: do the flip flop technique to never OOM
+        }
+        println!("found {} new items", new_items_count);
+        new_db = false; // db is inited after first loop
+        if let Err(e) = ids_db.save_to_path(ids_db_path) {
+            eprintln!("[ERR] couldn't save db to path");
+        }
+        sleep(Duration::from_secs(60)).await;
     }
 }

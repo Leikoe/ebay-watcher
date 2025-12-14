@@ -34,6 +34,10 @@ impl IdDatabase {
         self.ids.insert(id.to_owned());
     }
 
+    pub fn contains(&self, id: &str) -> bool {
+        self.ids.contains(id)
+    }
+
     fn serialize(&self, file: &mut File) -> io::Result<()> {
         for id in &self.ids {
             writeln!(file, "{}", id)?;

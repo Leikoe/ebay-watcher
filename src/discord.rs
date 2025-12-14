@@ -57,11 +57,16 @@ impl DiscordClient {
             if let Some((price, currency)) = listing.bin_price() {
                 emb = emb.field("BIN Price", &format!("{} {}", price, currency), false);
             }
-            emb.field("Condition", &listing.condition, false).field(
-                "Listing Type",
-                &listing.buying_options.join(", "),
+            emb.field(
+                "Condition",
+                listing
+                    .condition
+                    .as_ref()
+                    .map(String::as_str)
+                    .unwrap_or("Unknown"),
                 false,
             )
+            .field("Listing Type", &listing.buying_options.join(", "), false)
         });
         webhook
             .execute(&self.http_client, false, builder)
