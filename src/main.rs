@@ -60,7 +60,10 @@ async fn main() {
     let mut ids_db: HashMap<String, ItemSummary> = HashMap::new();
     let mut new_db = true;
 
-    webhook_client.send_message("Starting Up!").await;
+    webhook_client
+        .send_message("Starting Up!")
+        .await
+        .expect("couldn't send startup message");
 
     loop {
         let mut new_items_count: usize = 0;

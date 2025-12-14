@@ -19,12 +19,19 @@ impl DiscordClient {
         }
     }
 
-    pub async fn send_message(&self, message: &str) {
+    pub async fn send_message(&self, message: &str) -> Result<(), serenity::Error> {
         let webhook = Webhook::from_url(&self.http_client, &self.url)
             .await
             .expect("couldn't validate webhook url"); // TODO: this might fire a request to discord's api ...
 
         println!("[DISCORD] Seding message {:?}", message);
+
+        let builder = ExecuteWebhook::new().username("Watcher").content(message);
+
+        webhook
+            .execute(&self.http_client, false, builder)
+            .await
+            .map(|_| ())
     }
 
     pub async fn send_item(
