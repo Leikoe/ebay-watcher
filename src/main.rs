@@ -86,7 +86,7 @@ async fn run(
         .map_err(|e| format!("get token failed: {}", e))?;
 
     let mut ids_db: HashMap<String, ItemSummary> = HashMap::new();
-    let mut new_db = true;
+    let mut db_initializing = true;
 
     loop {
         // if token soon expired, request a new one
@@ -139,7 +139,6 @@ async fn run(
                         continue;
                     }
                 };
-                // .map_err(|e| format!("failed to decode resp to json: {:?}", e))?;
 
                 for mut item in items.item_summaries {
                     item.listing_marketplace_id = marketplace_id.to_owned();
@@ -149,16 +148,16 @@ async fn run(
                     };
 
                     // if new item and not initializing db
-                    if !new_db {
+                    if !db_initializing {
                         match ids_db.get(id) {
                             Some(old_item) => {
                                 if old_item.listing_marketplace_id != item.listing_marketplace_id {
-                                    println!(
-                                        "[TRACE] {}({}) was already found on {}",
-                                        item.id().unwrap_or_default(),
-                                        item.listing_marketplace_id,
-                                        old_item.listing_marketplace_id
-                                    );
+                                    // println!(
+                                    //     "[TRACE] {}({}) was already found on {}",
+                                    //     item.id().unwrap_or_default(),
+                                    //     item.listing_marketplace_id,
+                                    //     old_item.listing_marketplace_id
+                                    // );
                                     continue;
                                 }
 
@@ -185,8 +184,9 @@ async fn run(
                                 }
                             }
                         };
+                    } else if !ids_db.contains_key(id) {
+                        ids_db.insert(id.to_owned(), item.clone()); // TODO: do the flip flop technique to never OOM
                     }
-                    ids_db.insert(id.to_owned(), item.clone()); // TODO: do the flip flop technique to never OOM
                 }
             }
         }
@@ -195,7 +195,7 @@ async fn run(
             "Found {} new items and {} updated prices",
             new_items_count, updated_items_count
         );
-        new_db = false; // db is inited after first loop
+        db_initializing = false; // db is inited after first loop
         sleep(Duration::from_secs(60)).await;
     }
 }
