@@ -62,6 +62,19 @@ async fn ebay_get_token(
     })
 }
 
+async fn send_error_to_discord<E: ToString>(
+    webhook_client: &DiscordClient,
+    location: &str,
+    err: E,
+) -> Result<(), String> {
+    eprintln!("{}: {}", location, err.to_string());
+    webhook_client
+        .send_message(&format!("{}, check logs for more info", location))
+        .await
+        .map_err(|e| format!("Couldn't send {} webhook, reason: {:?}", location, e))?;
+    Ok(())
+}
+
 async fn run(
     webhook_client: &DiscordClient,
     http_client: &Client,
@@ -104,55 +117,27 @@ async fn run(
                 .await {
                     Ok(res) => res,
                     Err(e) => {
-                        eprintln!("browse request failed: {:?}", e);
-                        webhook_client
-                            .send_message(&format!(
-                                "browse request failed, check logs for more info"
-                            ))
-                            .await
-                            .map_err(|e| {
-                                format!(
-                                    "Couldn't send browse request failed webhook, reason: {:?}",
-                                    e
-                                )
-                            })?;
+                        send_error_to_discord(webhook_client, "browse request failed", e).await?;
                         continue;
                     },
                 };
 
                 let status = resp.status();
                 if status != 200 {
-                    let txt = resp.text().await;
-                    println!("{:?}", txt);
-                    webhook_client
-                        .send_message(&format!(
-                            "got status {:?}, check logs for more info",
-                            status
-                        ))
-                        .await
-                        .map_err(|e| {
-                            format!(
-                                "Couldn't send bad status ({:?}) webhook, reason: {:?}",
-                                status, e
-                            )
-                        })?;
+                    let txt = resp.text().await.unwrap_or_default();
+                    send_error_to_discord(
+                        webhook_client,
+                        &format!("got bad status {:?}", status),
+                        txt,
+                    )
+                    .await?;
                     continue;
                 }
                 let items: ItemSummaryResponse = match resp.json().await {
                     Ok(items) => items,
                     Err(e) => {
-                        println!("failed to decode resp to json: {:?}", e);
-                        webhook_client
-                            .send_message(&format!(
-                                "failed to decode resp to json, check logs for more info",
-                            ))
-                            .await
-                            .map_err(|e| {
-                                format!(
-                                    "Couldn't send failed to decode resp to json webhook, reason: {:?}",
-                                    e
-                                )
-                            })?;
+                        send_error_to_discord(webhook_client, "failed to decode resp to json", e)
+                            .await?;
                         continue;
                     }
                 };
