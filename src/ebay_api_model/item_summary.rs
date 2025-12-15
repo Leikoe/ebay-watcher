@@ -45,6 +45,9 @@ pub struct ItemSummary {
     #[serde(rename = "itemEndDate")]
     pub item_end_date: Option<String>,
     pub seller: ItemSeller,
+    #[serde(rename = "listingMarketplaceId")]
+    #[serde(default = "Default::default")]
+    pub listing_marketplace_id: String,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]

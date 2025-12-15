@@ -7,7 +7,7 @@ use base64::prelude::{BASE64_STANDARD, Engine as _};
 use dotenv::dotenv;
 use reqwest::Client;
 use serde::Deserialize;
-use std::{array, collections::HashMap, env, time::Duration};
+use std::{array, collections::HashMap, env, fmt::Debug, time::Duration};
 use tokio::{
     signal,
     time::{Instant, sleep},
@@ -62,12 +62,12 @@ async fn ebay_get_token(
     })
 }
 
-async fn send_error_to_discord<E: ToString>(
+async fn send_error_to_discord<E: Debug>(
     webhook_client: &DiscordClient,
     location: &str,
     err: E,
 ) -> Result<(), String> {
-    eprintln!("{}: {}", location, err.to_string());
+    eprintln!("{}: {:?}", location, err);
     webhook_client
         .send_message(&format!("{}, check logs for more info", location))
         .await
@@ -85,8 +85,7 @@ async fn run(
         .await
         .map_err(|e| format!("get token failed: {}", e))?;
 
-    let mut ids_dbs: [HashMap<String, ItemSummary>; MARKETPLACE_IDS.len()] =
-        array::repeat(HashMap::new());
+    let mut ids_db: HashMap<String, ItemSummary> = HashMap::new();
     let mut new_db = true;
 
     loop {
@@ -101,8 +100,7 @@ async fn run(
         let mut new_items_count: usize = 0;
         let mut updated_items_count: usize = 0;
         println!("requesting items from ebay..");
-        for (marketplace_idx, &marketplace_id) in MARKETPLACE_IDS.iter().enumerate() {
-            let ids_db = &mut ids_dbs[marketplace_idx];
+        for marketplace_id in MARKETPLACE_IDS {
             for query in QUERIES {
                 println!("\tmarketplace_id={} query={}", marketplace_id, query);
                 let resp = match http_client
@@ -143,7 +141,8 @@ async fn run(
                 };
                 // .map_err(|e| format!("failed to decode resp to json: {:?}", e))?;
 
-                for item in &items.item_summaries {
+                for mut item in items.item_summaries {
+                    item.listing_marketplace_id = marketplace_id.to_owned();
                     let Some(id) = item.id() else {
                         eprintln!("coudln't get item id from ({})", item.item_id);
                         continue;
@@ -153,6 +152,16 @@ async fn run(
                     if !new_db {
                         match ids_db.get(id) {
                             Some(old_item) => {
+                                if old_item.listing_marketplace_id != item.listing_marketplace_id {
+                                    println!(
+                                        "[TRACE] {}({}) was already found on {}",
+                                        item.id().unwrap_or_default(),
+                                        item.listing_marketplace_id,
+                                        old_item.listing_marketplace_id
+                                    );
+                                    continue;
+                                }
+
                                 if item.price != old_item.price {
                                     updated_items_count += 1;
                                     if let Err(e) = webhook_client
