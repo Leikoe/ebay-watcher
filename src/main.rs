@@ -152,12 +152,7 @@ async fn run(
                         match ids_db.get_mut(id) {
                             Some(old_item) => {
                                 if old_item.listing_marketplace_id != item.listing_marketplace_id {
-                                    // println!(
-                                    //     "[TRACE] {}({}) was already found on {}",
-                                    //     item.id().unwrap_or_default(),
-                                    //     item.listing_marketplace_id,
-                                    //     old_item.listing_marketplace_id
-                                    // );
+                                    // skip update check if it is from another ebay marketplace
                                     continue;
                                 }
 
@@ -200,7 +195,7 @@ async fn run(
             new_items_count, updated_items_count
         );
         db_initializing = false; // db is inited after first loop
-        sleep(Duration::from_secs(60)).await;
+        sleep(Duration::from_mins(5)).await;
     }
 }
 
