@@ -92,7 +92,7 @@ async fn run(
             let ids_db = &mut ids_dbs[marketplace_idx];
             for query in QUERIES {
                 println!("\tmarketplace_id={} query={}", marketplace_id, query);
-                let resp = http_client
+                let resp = match http_client
                 .get(format!(
                     "https://api.ebay.com/buy/browse/v1/item_summary/search?q={}&limit=200&sort=newlyListed&category_ids=175673",
                     query
@@ -101,18 +101,62 @@ async fn run(
                 .header("Accept-Language", "en-US")
                 .header("X-EBAY-C-MARKETPLACE-ID", marketplace_id)
                 .send()
-                .await.map_err(|e| format!("browse request failed: {:?}", e))?;
+                .await {
+                    Ok(res) => res,
+                    Err(e) => {
+                        eprintln!("browse request failed: {:?}", e);
+                        webhook_client
+                            .send_message(&format!(
+                                "browse request failed, check logs for more info"
+                            ))
+                            .await
+                            .map_err(|e| {
+                                format!(
+                                    "Couldn't send browse request failed webhook, reason: {:?}",
+                                    e
+                                )
+                            })?;
+                        continue;
+                    },
+                };
 
                 let status = resp.status();
                 if status != 200 {
                     let txt = resp.text().await;
                     println!("{:?}", txt);
-                    return Err(format!("Got Status {:?}: {:?}", status, txt));
+                    webhook_client
+                        .send_message(&format!(
+                            "got status {:?}, check logs for more info",
+                            status
+                        ))
+                        .await
+                        .map_err(|e| {
+                            format!(
+                                "Couldn't send bad status ({:?}) webhook, reason: {:?}",
+                                status, e
+                            )
+                        })?;
+                    continue;
                 }
-                let items: ItemSummaryResponse = resp
-                    .json()
-                    .await
-                    .map_err(|e| format!("failed to decode resp to json: {:?}", e))?;
+                let items: ItemSummaryResponse = match resp.json().await {
+                    Ok(items) => items,
+                    Err(e) => {
+                        println!("failed to decode resp to json: {:?}", e);
+                        webhook_client
+                            .send_message(&format!(
+                                "failed to decode resp to json, check logs for more info",
+                            ))
+                            .await
+                            .map_err(|e| {
+                                format!(
+                                    "Couldn't send failed to decode resp to json webhook, reason: {:?}",
+                                    e
+                                )
+                            })?;
+                        continue;
+                    }
+                };
+                // .map_err(|e| format!("failed to decode resp to json: {:?}", e))?;
 
                 for item in &items.item_summaries {
                     let Some(id) = item.id() else {
