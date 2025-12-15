@@ -149,7 +149,7 @@ async fn run(
 
                     // if new item and not initializing db
                     if !db_initializing {
-                        match ids_db.get(id) {
+                        match ids_db.get_mut(id) {
                             Some(old_item) => {
                                 if old_item.listing_marketplace_id != item.listing_marketplace_id {
                                     // println!(
@@ -171,6 +171,7 @@ async fn run(
                                         eprintln!("coudln't send price update webhook ({})", e);
                                         continue;
                                     }
+                                    old_item.price = item.price;
                                 }
                             }
                             None => {
@@ -183,10 +184,12 @@ async fn run(
                                     eprintln!("coudln't send new item webhook ({})", e);
                                     continue;
                                 }
+                                ids_db.insert(id.to_owned(), item); // TODO: do the flip flop technique to never OOM
                             }
                         };
                     } else if !ids_db.contains_key(id) {
-                        ids_db.insert(id.to_owned(), item.clone()); // TODO: do the flip flop technique to never OOM
+                        // initialize db with all items not already added by key
+                        ids_db.insert(id.to_owned(), item); // TODO: do the flip flop technique to never OOM
                     }
                 }
             }
