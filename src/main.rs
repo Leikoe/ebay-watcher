@@ -162,6 +162,7 @@ async fn run(
                                 }
 
                                 if item.price != old_item.price {
+                                    println!("{:?} -> {:?}", old_item.price, item.price);
                                     updated_items_count += 1;
                                     if let Err(e) = webhook_client
                                         .send_item(NotifEvent::UPDATED, &item, Some(old_item))
