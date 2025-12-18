@@ -105,7 +105,7 @@ async fn run(
                 println!("\tmarketplace_id={} query={}", marketplace_id, query);
                 let resp = match http_client
                 .get(format!(
-                    "https://api.ebay.com/buy/browse/v1/item_summary/search?q={}&limit=200&sort=newlyListed&category_ids=175673,58058",
+                    "https://api.ebay.com/buy/browse/v1/item_summary/search?q={}&limit=200&sort=newlyListed&category_ids=58058",
                     query
                 ))
                 .header("Authorization", format!("Bearer {}", ebay_token.access_token))
