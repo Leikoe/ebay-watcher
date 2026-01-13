@@ -7,7 +7,7 @@ pub struct ItemSeller {
     #[serde(rename = "feedbackPercentage")]
     pub feedback_percentage: String,
     #[serde(rename = "feedbackScore")]
-    pub feedback_score: u64,
+    pub feedback_score: i64,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
